@@ -18,7 +18,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { randomBase62 } from "../../../utils/short-id.js";
 import { SKILLS_DDL, SKILL_FTS_DDL, SKILL_VEC_DDL_TEMPLATE, FTS_CONTENT_MAX } from "../../skill/skill-store-ddl.js";
-import { buildFtsQuery, tokenizeForFts } from "../tokenize.js";
+import { FTS_TOKENIZER_VERSION, buildFtsQuery, tokenizeForFts } from "../tokenize.js";
 import type { ISkillStore, ExpiredVersionMeta, SkillStoreCapabilities, SkillSearchResult } from "../../skill/skill-store.interface.js";
 import { SkillStoreError } from "../../skill/skill-store.interface.js";
 import type {
@@ -174,12 +174,22 @@ export class SqliteSkillStore implements ISkillStore {
    * 迁移策略：检测缺少 owner_agent_id → DROP 旧 FTS 表 → 重建 → 从 skills 主表回填 head 行。
    * 这比 ALTER 安全（FTS5 不支持 ALTER），且不丢失任何数据（主表是唯一数据源）。
    */
+  private writeFtsTokenizerVersion(): void {
+    this.db.prepare(
+      "INSERT INTO skill_fts_meta (key, value) VALUES ('fts_tokenizer_version', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    ).run(String(FTS_TOKENIZER_VERSION));
+  }
+
   private migrateFtsSchema(): void {
     // 检测：如果 skill_fts 表不存在则跳过（首次启动会由 SKILL_FTS_DDL 自动创建）
     const tableCheck = this.db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='skill_fts'")
       .get() as { name: string } | undefined;
-    if (!tableCheck) return;
+    this.db.exec("CREATE TABLE IF NOT EXISTS skill_fts_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+    if (!tableCheck) {
+      this.writeFtsTokenizerVersion();
+      return;
+    }
 
     // 检测现有 skill_fts 是否包含 owner_agent_id 列
     const cols = this.db
@@ -187,8 +197,11 @@ export class SqliteSkillStore implements ISkillStore {
       .all() as Array<{ cid: number; name: string; type: string; notnull: number; dflt_value: unknown; pk: number }>;
     const colNames = new Set(cols.map((c) => c.name));
 
-    // 新版需要 owner_agent_id / task_id / user_id，旧版只有 5 列缺这 3 个
-    if (colNames.has("owner_agent_id")) return; // 已是新版 schema，无需迁移
+    // 新版需要 owner_agent_id / task_id / user_id，旧版只有 5 列缺这 3 个；分词器版本变化也要重建
+    const version = this.db
+      .prepare("SELECT value FROM skill_fts_meta WHERE key = 'fts_tokenizer_version'")
+      .get() as { value: string } | undefined;
+    if (colNames.has("owner_agent_id") && version?.value === String(FTS_TOKENIZER_VERSION)) return; // 无需迁移
 
     this.logger?.info("[skill-store] migrating skill_fts schema: old columns missing owner_agent_id/task_id/user_id");
 
@@ -233,6 +246,7 @@ export class SqliteSkillStore implements ISkillStore {
         );
       }
 
+      this.writeFtsTokenizerVersion();
       this.db.exec("COMMIT");
       this.logger?.info(`[skill-store] fts migration done: rebuilt skill_fts with ${headRows.length} head rows`);
     } catch (e) {

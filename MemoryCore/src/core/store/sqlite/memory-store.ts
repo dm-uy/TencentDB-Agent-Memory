@@ -170,6 +170,7 @@ function requireNodeSqlite(): typeof import("node:sqlite") {
 // `import { ... } from "./memory-store.js"` call sites (incl. memory-store.test.ts).
 
 import {
+  FTS_TOKENIZER_VERSION,
   buildFtsQuery,
   tokenizeForFts,
   bm25RankToScore,
@@ -1029,6 +1030,8 @@ export class VectorStore implements IMemoryStore {
       // Rebuild FTS index if migrated from v1 or tables were freshly created
       if (needsFtsRebuild) {
         this.rebuildFtsIndex();
+      } else {
+        this.writeFtsTokenizerVersion();
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -1117,6 +1120,19 @@ export class VectorStore implements IMemoryStore {
     } catch {
       return null;
     }
+  }
+
+  private readFtsTokenizerVersion(): string | undefined {
+    const row = this.db
+      .prepare("SELECT value FROM embedding_meta WHERE key = ?")
+      .get("fts_tokenizer_version") as { value: string } | undefined;
+    return row?.value;
+  }
+
+  private writeFtsTokenizerVersion(): void {
+    this.db.prepare(
+      "INSERT INTO embedding_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    ).run("fts_tokenizer_version", String(FTS_TOKENIZER_VERSION));
   }
 
   private writeEmbeddingMeta(meta: EmbeddingMeta): void {
@@ -3147,8 +3163,9 @@ export class VectorStore implements IMemoryStore {
         && cols.some((c) => c.name === "agent_id");
       const hasV4Col = cols.some((c) => c.name === "version");
       const hasV5Col = cols.some((c) => c.name === "task_id");
+      const tokenizerCurrent = this.readFtsTokenizerVersion() === String(FTS_TOKENIZER_VERSION);
 
-      if (hasV2Col && hasV3Col && hasV4Col && hasV5Col) {
+      if (hasV2Col && hasV3Col && hasV4Col && hasV5Col && tokenizerCurrent) {
         return false; // Already current — no migration needed
       }
 
@@ -3164,6 +3181,8 @@ export class VectorStore implements IMemoryStore {
         this.logger?.info(`${TAG} Migrating FTS5 tables v3 → v4 (add version column)`);
       } else if (!hasV5Col) {
         this.logger?.info(`${TAG} Migrating FTS5 tables v4 → v5 (add task_id column)`);
+      } else {
+        this.logger?.info(`${TAG} Rebuilding FTS5 tables: tokenizer version changed`);
       }
       this.db.exec("DROP TABLE IF EXISTS l1_fts");
       this.db.exec("DROP TABLE IF EXISTS l0_fts");
@@ -3302,6 +3321,7 @@ export class VectorStore implements IMemoryStore {
         }
       }
 
+      this.writeFtsTokenizerVersion();
       this.logger?.info(
         `${TAG} FTS5 rebuild complete: L1=${l1Count}/${l1Rows.length}, L0=${l0Count}/${l0Rows.length}`,
       );
