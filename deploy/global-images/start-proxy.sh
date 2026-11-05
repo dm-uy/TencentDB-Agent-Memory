@@ -140,6 +140,9 @@ costGuard:
 # knowledge 依赖 memory-hub 起来，否则 hook 内部会降级为空块。
 injection:
   enabled: true
+  # 写进注入文本、让 agent 去 curl 的地址。不配时 proxy 会用容器内网 IP，
+  # Docker Desktop 的宿主机访问不到；跨机使用时设 PROXY_EXTERNAL_URL。
+  externalGatewayUrl: "${PROXY_EXTERNAL_URL:-http://127.0.0.1:${PROXY_PORT}}"
   injectors:
     - skill
     - knowledge
