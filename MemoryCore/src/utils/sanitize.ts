@@ -143,8 +143,8 @@ export function shouldExtractL1(text: string): boolean {
   // if (text.length > 5000) return false;
 
   // ── Content-quality filters ──
-  // Match strings composed entirely of non-word, non-space, non-CJK characters (1–5 chars).
-  if (/^[^\w\s\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]{1,5}$/.test(text)) return false;
+  // Match strings with no letter or digit of any script, only symbols (1–5 chars).
+  if (/^[^\p{L}\p{N}_\s]{1,5}$/u.test(text)) return false;
   if (/^[?？]+$/.test(text)) return false;
 
   // ── Security filters ──

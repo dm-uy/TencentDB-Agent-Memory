@@ -7,6 +7,7 @@
  * 规则（PRD FR-4 / INTERFACE §2，源中英混合）：
  *   - 英文/数字：转小写，空格与标点转连字符，去首尾/重复连字符。
  *   - 中文（CJK）：保留汉字本身，只去空格（不转拼音、不丢弃）。
+ *   - 其它文字（西里尔字母等）：与英文相同，转小写后保留（`Модуль Redis` → `модуль-redis`）。
  *   - 混合：分别按上面规则处理后拼接（`Redis 主从` → `redis-主从`）。
  */
 
@@ -18,7 +19,7 @@ function isCjkChar(ch: string): boolean {
 }
 
 function isAlnumChar(ch: string): boolean {
-  return /[a-zA-Z0-9]/.test(ch);
+  return /[\p{L}\p{N}]/u.test(ch);
 }
 
 /**

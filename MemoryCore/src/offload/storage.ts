@@ -180,7 +180,7 @@ export function sanitizeJsonLine(jsonStr: string): string {
     /* fall through */
   }
   cleaned = jsonStr.replace(
-    /[^\x09\x0A\x0D\x20-\x7E\u00A0-\u024F\u3400-\u4DBF\u4E00-\u9FFF\uFF00-\uFFEF]/g,
+    /[^\x09\x0A\x0D\x20-\x7E\u00A0-\u024F\u0400-\u052F\u3400-\u4DBF\u4E00-\u9FFF\uFF00-\uFFEF]/g,
     "",
   );
   try {
