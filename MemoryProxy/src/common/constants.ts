@@ -36,6 +36,8 @@ export const SKIP_REQUEST_HEADERS_HOP_BY_HOP: ReadonlySet<string> = new Set([
   "content-length",
   "transfer-encoding",
   "connection",
+  // fetch 自己协商并解压；透传客户端的 zstd 后 Node 解不开，响应体会被当文本读坏。
+  "accept-encoding",
 ]);
 
 /**
@@ -48,6 +50,7 @@ export const SKIP_REQUEST_HEADERS_WITH_INTERNAL: ReadonlySet<string> = new Set([
   "content-length",
   "transfer-encoding",
   "connection",
+  "accept-encoding",
   "x-tdai-user-key",
 ]);
 

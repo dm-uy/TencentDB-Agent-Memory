@@ -77,6 +77,7 @@ const SKIP_REQUEST_HEADERS = new Set([
   "content-length",
   "transfer-encoding",
   "connection",
+  "accept-encoding",
 ]);
 
 /** Response headers that would confuse the client if forwarded verbatim. */
